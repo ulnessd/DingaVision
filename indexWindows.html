@@ -1,1 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>DingaVision • Chemistry Robotics Demo</title>
+  <style>
+    :root {
+      --maroon: #7D3039;
+      --gold: #E8B90F;
+      --offwhite: #F5F5F5;
+      --gray: #333;
+    }
+
+    body {
+      margin: 0;
+      font-family: "Segoe UI", sans-serif;
+      background: var(--offwhite);
+      color: var(--gray);
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+    }
+
+    header {
+      background: var(--maroon);
+      color: white;
+      padding: 2rem 1rem;
+      text-align: center;
+    }
+
+    main {
+      flex: 1;
+      max-width: 900px;
+      width: 90%;
+      margin: 2rem auto;
+      padding: 1.5rem;
+      background: white;
+      border-radius: 10px;
+      box-shadow: 0 3px 12px rgba(0, 0, 0, 0.1);
+    }
+
+    video, canvas {
+      width: 100%;
+      max-height: 400px;
+      border-radius: 6px;
+      margin-bottom: 1rem;
+    }
+
+    button {
+      background: var(--maroon);
+      color: white;
+      border: none;
+      padding: 0.7rem 1.4rem;
+      font-size: 1.1rem;
+      border-radius: 6px;
+      cursor: pointer;
+      margin: 0.5rem;
+    }
+
+    input[type="file"], input[type="text"] {
+      padding: 0.6rem;
+      font-size: 1rem;
+      width: 100%;
+      margin-bottom: 1rem;
+      border-radius: 4px;
+      border: 1px solid #ccc;
+    }
+
+    .label {
+      font-weight: bold;
+      color: var(--maroon);
+      margin-top: 1rem;
+    }
+
+    .results pre {
+      background: #EFEFEF;
+      padding: 0.8rem;
+      border-radius: 5px;
+      font-size: 0.95rem;
+      white-space: pre-wrap;
+    }
+
+    footer {
+      background: var(--maroon);
+      color: white;
+      text-align: center;
+      padding: 1rem;
+      font-size: 1.1rem;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>DingaVision</h1>
+    <p>“…take the department into the robotics age!”</p>
+  </header>
+
+  <main>
+    <label for="cameraSelect">Select Camera:</label>
+    <select id="cameraSelect"></select>
+    <video id="video" autoplay></video>
+    <div style="text-align: center;">
+      <button onclick="captureAndAnalyze()">Capture & Analyze</button>
+      <input type="file" id="imageUpload" accept="image/*" />
+    </div>
+
+    <div class="label">This is what I see:</div>
+    <pre id="captionOutput">(waiting...)</pre>
+
+    <div class="label">Ask a question about the image:</div>
+    <input type="text" id="promptInput" placeholder="Type your prompt here..." />
+    <button onclick="submitPrompt()">Ask</button>
+
+    <div class="label">Response:</div>
+    <pre id="responseOutput">(waiting...)</pre>
+  </main>
+
+  <footer>
+    Cobber Chemistry
+  </footer>
+
+  <canvas id="canvas" style="display:none;"></canvas>
+
+  <script>
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('canvas');
+    const cameraSelect = document.getElementById('cameraSelect');
+    let latestCaption = "";
+    let imageFile = null;
+
+    async function listCameras() {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const videoInputs = devices.filter(device => device.kind === 'videoinput');
+      cameraSelect.innerHTML = '';
+      videoInputs.forEach(device => {
+        const option = document.createElement('option');
+        option.value = device.deviceId;
+        option.text = device.label || `Camera ${cameraSelect.length + 1}`;
+        cameraSelect.appendChild(option);
+      });
+      if (videoInputs[0]) startCamera(videoInputs[0].deviceId);
+    }
+
+    async function startCamera(deviceId) {
+      const constraints = {
+        video: { deviceId: deviceId ? { exact: deviceId } : undefined }
+      };
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      video.srcObject = stream;
+    }
+
+    cameraSelect.addEventListener('change', () => {
+      const selectedDeviceId = cameraSelect.value;
+      if (selectedDeviceId) startCamera(selectedDeviceId);
+    });
+
+    document.getElementById('imageUpload').addEventListener('change', event => {
+      imageFile = event.target.files[0];
+      if (imageFile) sendImage(imageFile);
+    });
+
+    async function captureAndAnalyze() {
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+      const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg'));
+      sendImage(blob);
+    }
+
+    async function sendImage(fileBlob) {
+      const formData = new FormData();
+      formData.append('file', fileBlob, 'capture.jpg');
+
+      const response = await fetch('/analyze-image', {
+        method: 'POST',
+        body: formData
+      });
+      const result = await response.json();
+      latestCaption = result.caption || "(no caption)";
+      document.getElementById('captionOutput').textContent = latestCaption;
+    }
+
+    async function submitPrompt() {
+      const prompt = document.getElementById('promptInput').value;
+      const response = await fetch('/interpret', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ caption: latestCaption, prompt })
+      });
+      const result = await response.json();
+      document.getElementById('responseOutput').textContent = result.response || "(no response)";
+    }
+
+    window.addEventListener('DOMContentLoaded', listCameras);
+  </script>
+</body>
+</html>
 
